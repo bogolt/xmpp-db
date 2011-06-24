@@ -119,7 +119,18 @@ def message_to_dict(msg):
 	if not msg:
 		return None
 	return {msg.id():msg.data.copy()}
+
+def message_dict_to_plain(msg):
+	m_dict = {}
+	for m in msg.values():
+		if isinstance(m, Message):
+			m_dict[m.id()] = m.data.copy()
+		else:
+			m_dict[m[ID]] = m
 	
+	return m_dict
+		
+
 def to_message_dict(messages):	
 	msg_dict = {}
 	if not messages:

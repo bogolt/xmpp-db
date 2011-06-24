@@ -70,9 +70,12 @@ class XmppClient:
 			
 		#find new signatures, verify them and add to db
 		new_sigs = {}
-		for s in sigs.values():
-			if not s.id() in db_sigs:
-				new_sigs[s.id()] = s
+		if isinstance(sigs, message.Message):
+			new_sigs[sigs.id()] = sigs
+		else:
+			for s in sigs.values():
+				if db_sigs and ( not s.id() in db_sigs ):
+					new_sigs[s.id()] = s
 		if not new_sigs:
 			log.info('no new signatures avialable for message %s'%(m.id()))
 			return True
@@ -86,7 +89,7 @@ class XmppClient:
 		if not user:
 			#TODO: ask other nodes about this user
 			return None
-		log.info('msg user %s'%(user,))
+		log.info('found public key %s for user %s'%(user,user_id))
 		return crypto.PublicKey(base64.b64decode( user.data[message.PUBLIC_KEY]) )
 	
 	def verify_signature(self, signature, msg_id):
@@ -104,6 +107,7 @@ class XmppClient:
 		pubkey = self.get_public_key(s[message.USER])
 		if not pubkey:
 			log.error('no public key to verify signature %s'%(s,))
+			self.db.add_signature_unv(s)
 			return False
 		if not pubkey.verify(msg_id, base64.b64decode(s[message.SIGNATURE])):
 			#TODO: tell other user he is bad node, and don't talk to him anymore
@@ -160,4 +164,7 @@ montaron.receive(m,s)
 
 
 xzar = XmppClient('xzar')
-xzar.receive(montaron.msg_public, {montaron.msg_public_selfsign.id():montaron.msg_public_selfsign})
+print ''
+print ''
+print ''
+xzar.receive(montaron.msg_public, montaron.msg_public_selfsign)
