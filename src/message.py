@@ -48,8 +48,8 @@ def verify_hash(message):
 		return False
 	msg = message.copy()
 	del msg[ID]
-	if SIGNATURE_LIST in msg:
-		del msg[SIGNATURE_LIST]
+#	if SIGNATURE_LIST in msg:
+#		del msg[SIGNATURE_LIST]
 
 	hash = calculate_hash(msg)
 	return hash == id
@@ -79,11 +79,10 @@ class Message:
 		if ID in self.data:
 			log.error('message already contains id')
 			return False
-		self.data = hash_message(self.data)
-		self.data[HASH_TYPE] = crypto.get_default_hash_algo()
+		self.data = hash_message(self.data)		
 		return self.id()
 	
-	def sign(self, key, public_key_message):
+	def sign(self, key, user):
 		id = self.id()
 		if not id:
 			return None
@@ -91,8 +90,16 @@ class Message:
 		if not signature_value:
 			return None
 			
-		return Message({SIGNATURE:base64.b64encode(signature_value), USER:public_key_message.id(), SIGNED_MESSAGE:id})
+		signature = Message({SIGNATURE:base64.b64encode(signature_value), USER:user.id(), SIGNED_MESSAGE:id})
+		signature.hash()
+		return signature
 
+def sign_message(message_id, private_key, user):
+	signature_value = private_key.sign(message_id)
+	msg = Message({SIGNATURE:base64.b64encode(signature_value), USER:user.id(), SIGNED_MESSAGE:message_id})
+	msg.hash()
+	return msg
+	
 def generate_public_key_message(key):
 		pub_key_data = ''
 		if isinstance(key, crypto.PrivateKey):
@@ -107,3 +114,12 @@ def generate_public_key_message(key):
 #	if not user_id in signatures:
 #		return None
 #	return signatures[user_id]
+
+def message_to_dict(msg):
+	return {msg.id():msg.data.copy()}
+	
+def to_message_dict(messages):
+	msg_dict = {}
+	for msg in messages.values():
+		msg_dict[msg[ID]] = Message(msg)
+	return msg_dict

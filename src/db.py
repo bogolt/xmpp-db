@@ -3,12 +3,6 @@ import message
 import logging
 log = logging.getLogger('xmppdb')
 
-def sig_encode(signature):
-	if isinstance(signature, message.Message):
-		return {signature.id():signature.data.copy()}
-	#dict
-	return signature.copy()
-
 class Db:
 	def __init__(self, name):
 		self.conn = pymongo.Connection()
@@ -29,36 +23,57 @@ class Db:
 		self.unverified_signature.remove()
 		self.unverified_message.remove()
 		
+		self.show()
+		
+	def show(self):
+		log.info('db status')
+		for msg in self.message.find():
+			log.info('msg %s'%(msg,))
+	
+	def exists(self, id):
+		return None != self.get_message(id)
+		
 	def get_message(self, id):
 		'get normal, verified message'
 		msg = self.message.find_one({'id':id})
 		if not msg:
-			return False
+			return None,None
 		m = msg.copy()
 		del m['_id']
 		signatures = None
 		if message.SIGNATURE_LIST in m:
-			signatures = m[message.SIGNATURE_LIST]
+			signatures = m[message.SIGNATURE_LIST].copy()
 			del m[message.SIGNATURE_LIST]
-		return m,signatures
+		return message.Message(m),message.to_message_dict(signatures)
 		
 	def add_message(self, msg, signature = None):
 		'no verification requied, considered message is yet unknown'
 		m = msg.data.copy()
 		self.message.insert( m )
 		if signature:
-			m[message.SIGNATURE_LIST] = sig_encode(signature)
-			log.info('adding %s'%(m,))
+			m[message.SIGNATURE_LIST] = {}
+			m[message.SIGNATURE_LIST][signature.id()] = signature.data.copy()
+			log.info('message has signature: %s'%(m[message.SIGNATURE_LIST][signature.id()],))
+			
 			self.message.save(m)
 	
-	def add_signature(self, signature):
+	def add_signatures(self, sigs_dict, msg_id):
+		'add dict of signatures for one single message'		
+		for signature in sigs_dict.values():
+			self.add_signature(signature, msg_id)
+	
+	def add_signature(self, signature, msg_id):
 		'add valid, verified signature to an existing message'
-		msg = self.message.find_one( {message.ID:signature.data[message.SIGNED_MESSAGE]} )
+		if signature.data[message.SIGNED_MESSAGE] != msg_id:
+			return False
+			
+		msg = self.message.find_one( {message.ID:msg_id} )
 		if not msg:
 			return None
 		if not SIGNATURE_LIST in msg:
-			msg[SIGNATURE_LIST] = {}
-		msg[SIGNATURE_LIST][signature.id()] = signature.data
+			msg[SIGNATURE_LIST] = {signature.id():signature.data}
+		else:
+			msg[SIGNATURE_LIST][signature.id()] = signature.data
 		self.message.save(msg)
 		
 	def add_message1(self, message, signatures):

@@ -2,6 +2,7 @@ import pycryptopp
 from pycryptopp.publickey import rsa
 import hashlib
 import os
+import base64
 
 import logging
 log = logging.getLogger('xmppdb')
