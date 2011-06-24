@@ -117,19 +117,10 @@ class Db:
 	def add_message(self, msg, signature = None):
 		'no verification requied, considered message is yet unknown'
 		return self.add_message_to_table(msg, signature, self.message)
-		
-		
-		m = msg.data.copy()
-		
-		if signature:
-			m[message.SIGNATURE_LIST] = {}
-			m[message.SIGNATURE_LIST][signature.id()] = signature.data.copy()
-			log.info('message has signature: %s'%(m[message.SIGNATURE_LIST][signature.id()],))
-			self.message.insert( m )
-			return
-		
-		#insert signature-less message to another table
-		self.unverified_message.insert(m)
+
+	def add_message_unv(self, msg, signature = None):
+		'no verification requied, considered message is yet unknown'
+		return self.add_message_to_table(msg, signature, self.unverified_message)
 	
 	def add_signatures(self, sigs_dict, msg_id):
 		'add dict of signatures for one single message'

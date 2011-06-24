@@ -61,9 +61,12 @@ class XmppClient:
 		
 		db_msg,db_sigs = self.db.get_message(m.id())
 		if not db_msg:
-			log.info('message %s not exist in the db, adding it'%(m.id()))
-			self.db.add_message(m)
-			self.process_signatures(sigs, m.id())
+			log.info('message %s not exist in the db'%(m.id()))
+			
+			#self.db.add_message(m)
+			self.process_signatures(sigs, m)
+			#log.info('no known signature found, adding message to unverified table')
+				
 			return True
 
 		log.info('message %s already exist in the db'%(m.id()))
@@ -71,7 +74,8 @@ class XmppClient:
 		#find new signatures, verify them and add to db
 		new_sigs = {}
 		if isinstance(sigs, message.Message):
-			new_sigs[sigs.id()] = sigs
+			if sigs.id() not in db_sigs:
+				new_sigs[sigs.id()] = sigs
 		else:
 			for s in sigs.values():
 				if db_sigs and ( not s.id() in db_sigs ):
@@ -81,7 +85,7 @@ class XmppClient:
 			return True
 		
 		log.info('%s new signatures available for message %s'%(len(new_sigs), m.id()))
-		self.process_signatures(new_sigs, m.id())
+		self.process_signatures(new_sigs, m)
 		
 
 	def get_public_key(self, user_id):
@@ -91,45 +95,47 @@ class XmppClient:
 			return None
 		log.info('found public key %s for user %s'%(user,user_id))
 		return crypto.PublicKey(base64.b64decode( user.data[message.PUBLIC_KEY]) )
-	
-	def verify_signature(self, signature, msg_id):
-		s = signature.data
-		log.debug('verifying signature %s for message %s'%(s, msg_id))
-		if not message.ID in s:
-			return False
-		if not message.SIGNED_MESSAGE in s:
-			return False
-		if s[message.SIGNED_MESSAGE] != msg_id:
-			return False
-		if not message.USER in s:
-			return False
-		#find user
-		pubkey = self.get_public_key(s[message.USER])
-		if not pubkey:
-			log.error('no public key to verify signature %s'%(s,))
-			self.db.add_signature_unv(s)
-			return False
-		if not pubkey.verify(msg_id, base64.b64decode(s[message.SIGNATURE])):
-			#TODO: tell other user he is bad node, and don't talk to him anymore
-			log.error('signature %s is invalid'%(s,))
-			return False
-		log.info('signature %s is valid'%(s,))
-		return True
-	
-	def process_signatures(self, sign, msg_id):
+
+	def process_signatures(self, sign, msg):
 		valid_signs = {}
+		unverified_signs = {}
 		if isinstance(sign, message.Message):
 			signs = {sign.id():sign}
 		else:
 			signs = sign
 			
-		# Optianally can check first sig existence in the db, and then validiy of unknown sigs
 		for s in signs.values():
-			if self.verify_signature(s, msg_id):
-				valid_signs[s.id()] = s
+			if not s.is_valid():
+				log.error('invalid signature hash %s received, throw away'%(s.id(),))
+				#TODO: drop connection with bad-bad node who sent this
+				continue
+			if not message.is_signature_message_valid(s, msg.id()):
+				log.error('signature is invalid ( does not contain all necessary fields, or they are invalid )')
+				continue
+			pubkey = self.get_public_key(s.data[message.USER])
+			if not pubkey:
+				log.info('public key not available to verify signature %s'%(s.id(),))
+				#request public key
+				unverified_signs[s.id()] = s
+				continue
+			if not pubkey.verify(msg.id(), base64.b64decode(s[message.SIGNATURE])):
+				log.error('invalid signature %s received'%(s.id(),))
+				#TODO: sender of this message was trying to lie to us
+				continue
+			
+			log.info('signature %s is verified'%(s.id(),))
+			valid_signs[s.id()] = s
 			
 		if valid_signs:
-			self.db.add_signatures(valid_signs, msg_id)
+			log.info('there is %s trusted signatures, adding message %s to db'%(len(valid_signs), msg.id()))
+			self.db.add_message(msg, valid_signs)
+
+		if unverified_signs:
+			log.info('there is %s unverified signatures'%(len(unverified_signs)))
+			#TODO: no point in keeping same message twise ( in differnet tables ). Need a way to keep only signatures instead
+			self.db.add_message_unv(msg, unverified_signs)
+		
+		return True
 	
 	def sign(self, msg, more_data = None):
 		'sign message with private key'
@@ -164,7 +170,4 @@ montaron.receive(m,s)
 
 
 xzar = XmppClient('xzar')
-print ''
-print ''
-print ''
 xzar.receive(montaron.msg_public, montaron.msg_public_selfsign)

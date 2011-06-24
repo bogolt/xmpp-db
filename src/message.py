@@ -115,6 +115,20 @@ def generate_public_key_message(key):
 #		return None
 #	return signatures[user_id]
 
+def is_signature_message_valid(signature, msg_id):
+	s = signature.data
+	#log.debug('verifying signature %s for message %s'%(s, msg_id))
+	if not ID in s:
+		return False
+	if not SIGNED_MESSAGE in s:
+		return False
+	if s[SIGNED_MESSAGE] != msg_id:
+		return False
+	if not USER in s:
+		return False
+	return True
+
+
 def message_to_dict(msg):
 	if not msg:
 		return None
