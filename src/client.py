@@ -114,6 +114,18 @@ class XmppClient:
 				continue
 			pubkey = self.get_public_key(s.data[message.USER])
 			if not pubkey:
+				if msg.id() == s.data[message.USER]:
+					log.info('message %s is self-signed with signature %s'%(msg.id(),s.id()))
+					#TODO: suppose we always accept Self-Signed messages
+					pubkey = crypto.PublicKey(base64.b64decode( msg.data[message.PUBLIC_KEY] ))
+					if not pubkey.verify(msg.id(), base64.b64decode(s.data[message.SIGNATURE])):
+						log.error('invalid signature %s'%(s.id(),))
+						#TODO: invalid signature received
+						continue
+					log.info('self-signed message %s verified'%(msg.id(),))
+					valid_signs[s.id()] = s
+					continue
+					
 				log.info('public key not available to verify signature %s'%(s.id(),))
 				#request public key
 				unverified_signs[s.id()] = s
