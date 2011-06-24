@@ -41,10 +41,12 @@ class XmppClient:
 			return
 
 		for signature in pub_msg_sig.values():
-			if signature.id() == self.msg_public.id():
-				self.msg_public_selfsign = signature.copy()
+			if signature.data[message.USER] == self.msg_public.id():
+				self.msg_public_selfsign = signature
 				log.debug('found selfsignature in db %s'%(self.msg_public_selfsign,))
 				return
+		log.error('public key selfsign not found in the db')
+		raise('no pubkey selfsign')
 					
 	def receive(self, m, sigs):
 		'receive - verify, save to db message and signature'
@@ -55,6 +57,8 @@ class XmppClient:
 			#TODO: notify sender that he is bad-bad node
 			return
 		
+		log.debug('user %s received message %s, signed with %s'%(self.name, m, sigs))
+		
 		db_msg,db_sigs = self.db.get_message(m.id())
 		if not db_msg:
 			log.info('message %s not exist in the db, adding it'%(m.id()))
@@ -63,7 +67,7 @@ class XmppClient:
 			return True
 
 		log.info('message %s already exist in the db'%(m.id()))
-		
+			
 		#find new signatures, verify them and add to db
 		new_sigs = {}
 		for s in sigs.values():
@@ -74,6 +78,7 @@ class XmppClient:
 			return True
 		
 		log.info('%s new signatures available for message %s'%(len(new_sigs), m.id()))
+		self.process_signatures(new_sigs, m.id())
 		
 
 	def get_public_key(self, user_id):
@@ -82,7 +87,7 @@ class XmppClient:
 			#TODO: ask other nodes about this user
 			return None
 		log.info('msg user %s'%(user,))
-		return crypto.PublicKey(base64.b64decode( user[message.PUBLIC_KEY]) )
+		return crypto.PublicKey(base64.b64decode( user.data[message.PUBLIC_KEY]) )
 	
 	def verify_signature(self, signature, msg_id):
 		s = signature.data
@@ -152,3 +157,7 @@ class XmppClient:
 montaron = XmppClient('monthy')
 m,s = montaron.create_message( {'test':'hey'} )
 montaron.receive(m,s)
+
+
+xzar = XmppClient('xzar')
+xzar.receive(montaron.msg_public, {montaron.msg_public_selfsign.id():montaron.msg_public_selfsign})

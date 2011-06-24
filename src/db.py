@@ -38,6 +38,7 @@ class Db:
 		msg = self.message.find_one({'id':id})
 		if not msg:
 			return None,None
+		log.debug('db message found %s'%(msg,))
 		m = msg.copy()
 		del m['_id']
 		signatures = None
@@ -70,10 +71,10 @@ class Db:
 		msg = self.message.find_one( {message.ID:msg_id} )
 		if not msg:
 			return None
-		if not SIGNATURE_LIST in msg:
-			msg[SIGNATURE_LIST] = {signature.id():signature.data}
+		if not message.SIGNATURE_LIST in msg:
+			msg[message.SIGNATURE_LIST] = {signature.id():signature.data}
 		else:
-			msg[SIGNATURE_LIST][signature.id()] = signature.data
+			msg[message.SIGNATURE_LIST][signature.id()] = signature.data
 		self.message.save(msg)
 		
 	def add_message1(self, message, signatures):

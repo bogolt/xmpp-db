@@ -116,10 +116,14 @@ def generate_public_key_message(key):
 #	return signatures[user_id]
 
 def message_to_dict(msg):
+	if not msg:
+		return None
 	return {msg.id():msg.data.copy()}
 	
-def to_message_dict(messages):
+def to_message_dict(messages):	
 	msg_dict = {}
+	if not messages:
+		return msg_dict
 	for msg in messages.values():
 		msg_dict[msg[ID]] = Message(msg)
 	return msg_dict
