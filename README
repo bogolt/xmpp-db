@@ -1,0 +1,30 @@
+xmpp-db is a disctributed content storage. Data is spread through xmpp-bots which communicate with each other as well as with user itself ( using his primary xmpp-account)
+
+Each user identified by his public key.
+Each message posted by the user - is siged with his public key.
+
+Message is a key-value structure, with only mandatory attribute - id, which is hash of the rest of key-value pairs.
+
+User identification message:
+id: <hash of all message fields, except this one>
+public_key: <user's public key, base64 encoded>
+
+Message signature:
+id: <hash of all message fields, except this one>
+signature: <actuall signature, base64 encoded>
+user: <id of this user's identification message>
+signed_message: <id of the message this signature sign>
+
+any message can be signed by different users, this way giving others clue that this piece of data is trusted by many users.
+
+If one user signs Identification Message of another one - it means - one user trust another one. His node will accept all messages signed by this user, and pass then to other nodes.
+It is possible to create trust-chains, so that user can track the origin of any message, and tell if he trust it or not.
+Only trusted messages are accepted by nodes.
+
+Any node can ask another one some specific data, like: ask message body by presenting it's id
+
+Eg.
+Node Monthy received message from his trusted-node Xzar, which is signed with unknown signature.
+Monthy cannot accept this message, however he asks Xzar about the Identification message of this user. So Xzar returns identification message, Monthy verifies it with public key. Now when Monthy is assured that message is corrent, he need to know if he can trust that user. So he needs full trust-chain from him to this user. He ask this chain from Xzar, and only opon receiving and verifying it will he store the message in his db, and send it forth to other nodes.
+
+
