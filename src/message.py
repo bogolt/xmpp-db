@@ -56,7 +56,9 @@ def verify_hash(message):
 	
 class Message:
 	def __init__(self, keys_values):
-		self.data = keys_values
+		self.data = keys_values.copy()
+		if '_id' in self.data:
+			del self.data['_id']
 	
 	def __str__(self):
 		#s = []
@@ -135,12 +137,12 @@ def message_to_dict(msg):
 	return {msg.id():msg.data.copy()}
 
 def message_dict_to_plain(msg):
-	m_dict = {}
+	m_dict = []
 	for m in msg.values():
 		if isinstance(m, Message):
-			m_dict[m.id()] = m.data.copy()
+			m_dict.append(m.data.copy())
 		else:
-			m_dict[m[ID]] = m
+			m_dict.append(m)
 	
 	return m_dict
 		
@@ -149,6 +151,6 @@ def to_message_dict(messages):
 	msg_dict = {}
 	if not messages:
 		return msg_dict
-	for msg in messages.values():
+	for msg in messages:
 		msg_dict[msg[ID]] = Message(msg)
 	return msg_dict

@@ -106,7 +106,7 @@ class XmppClient:
 			
 		for s in signs.values():
 			if not s.is_valid():
-				log.error('invalid signature hash %s received, throw away'%(s.id(),))
+				log.error('invalid signature hash %s received, throw away %s'%(s.id(),s.data))
 				#TODO: drop connection with bad-bad node who sent this
 				continue
 			if not message.is_signature_message_valid(s, msg.id()):
@@ -130,7 +130,7 @@ class XmppClient:
 				#request public key
 				unverified_signs[s.id()] = s
 				continue
-			if not pubkey.verify(msg.id(), base64.b64decode(s[message.SIGNATURE])):
+			if not pubkey.verify(msg.id(), base64.b64decode(s.data[message.SIGNATURE])):
 				log.error('invalid signature %s received'%(s.id(),))
 				#TODO: sender of this message was trying to lie to us
 				continue
@@ -141,6 +141,11 @@ class XmppClient:
 		if valid_signs:
 			log.info('there is %s trusted signatures, adding message %s to db'%(len(valid_signs), msg.id()))
 			self.db.add_message(msg, valid_signs)
+			
+			if message.PUBLIC_KEY in msg.data:
+				# now it is possible the new public key appeared in our db, so check existing unverified signatures for validity now
+				log.info('new public key %s added to db, checking existing unverified messages'%(msg.id(),))
+				self.accept_messages_from(msg)
 
 		if unverified_signs:
 			log.info('there is %s unverified signatures'%(len(unverified_signs)))
@@ -148,6 +153,33 @@ class XmppClient:
 			self.db.add_message_unv(msg, unverified_signs)
 		
 		return True
+	
+	def accept_messages_from(self, id_msg):
+		unv_sigs = self.db.get_unverified_signatures(id_msg.id())
+		if not unv_sigs:
+			return
+		log.info('found %s previously unverified signatures by user %s'%(len(unv_sigs), id_msg.id()))
+		# now verify this signatures one by one
+		pubkey = crypto.PublicKey(base64.b64decode( id_msg.data[message.PUBLIC_KEY]) )
+		if not pubkey:
+			log.error('invalid public key %s, unable to verify messages'%(id_msg.id()))
+			return False
+		
+		pub_keys = []
+		for s in unv_sigs.values():
+			if not pubkey.verify(s.data[message.SIGNED_MESSAGE], base64.b64decode(s.data[message.SIGNATURE])):
+				log.error('invalid signature %s received'%(s.id(),))
+				#TODO: remove this signature, tell others it is invalid ( who sent is to us? )
+				continue
+			log.info('signature %s is verified and belived to be trusted, add it with messages it sign to db'%(s.id()))
+			msg = self.db.trust_signature(s)
+			if msg and isinstance(msg, message.Message):
+				if message.PUBLIC_KEY in msg.data:
+					log.info('new public key %s belived to be trusted'%(msg.id()))
+					pub_keys.append(msg)
+		
+		for pub_key in pub_keys:
+			self.accept_messages_from(pub_key)
 	
 	def sign(self, msg, more_data = None):
 		'sign message with private key'
@@ -174,12 +206,32 @@ class XmppClient:
 		log.info('adding message %s to db'%(msg.id()))
 		self.db.add_message(msg, signature)
 		return msg,{signature.id():signature}
+		
+	def sign_message(self, msg):
+		sign = self.sign(msg)
+		if not sign:
+			return None
+		self.db.add_signatures(sign)
+		return sign
 
 
-montaron = XmppClient('monthy')
-m,s = montaron.create_message( {'test':'hey'} )
-montaron.receive(m,s)
+def key_chain_test():
+	montaron = XmppClient('monthy')
+	m,s = montaron.create_message( {'test':'hey'} )
 
-
-xzar = XmppClient('xzar')
-xzar.receive(montaron.msg_public, montaron.msg_public_selfsign)
+	jahera = XmppClient('jahera')
+	#Jahera receives message from unknown ID ( Monthy )
+	jahera.receive(m,s)
+	
+	xzar = XmppClient('xzar')
+	xzar.receive(montaron.msg_public, montaron.msg_public_selfsign)
+	xzar_monthy_sign = xzar.sign_message(montaron.msg_public)
+	
+	# jahera meet xzar ( she usually hates him, but not this time )
+	jahera.receive(xzar.msg_public, xzar.msg_public_selfsign)
+	
+	# now she is able to accept monthy's public key, signed by xzar's signature
+	jahera.receive(montaron.msg_public, xzar_monthy_sign)
+	
+	
+key_chain_test()

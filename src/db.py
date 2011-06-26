@@ -10,6 +10,7 @@ class Db:
 
 		# message signed with valid signatures
 		self.message = self.db.message
+		self.signature = self.db.signature
 		
 		# signatures which does not have public key ( yet )
 		self.unverified_signature = self.db.unverified_signature
@@ -18,12 +19,16 @@ class Db:
 		self.unverified_message = self.db.unverified_message
 		
 		#log.info('Debug - remove all entries before use')
-		self.message.remove()
+		self.debug_clear()
 		
 		self.unverified_signature.remove()
 		self.unverified_message.remove()
 		
 		self.show()
+
+	def debug_clear(self):
+		self.message.remove()
+		self.signature.remove()
 		
 	def show(self):
 		log.info('db status')
@@ -42,93 +47,102 @@ class Db:
 		del msg['_id']
 		return message.Message(m)
 		
-	def get_message_from_table(self, id, table):
-		'get message from given table'
-		msg = table.find_one({'id':id})
+	def get_message_from_table(self, id, is_verified):
+		'get message from given table - eighter save or not'
+		
+		msg_table = self.message
+		sig_table = self.signature
+		if not is_verified:
+			msg_table = self.unverified_message
+			sig_table = self.unverified_signature
+			
+		msg = msg_table.find_one({message.ID:id})
 		if not msg:
 			return None, None
 		log.debug('db message found %s'%(msg,))
 		m = msg.copy()
 		del m['_id']
-		signatures = None
-		if message.SIGNATURE_LIST in m:
-			signatures = m[message.SIGNATURE_LIST].copy()
-			del m[message.SIGNATURE_LIST]
-		return message.Message(m),message.to_message_dict(signatures)
 		
-	def add_message_to_table(self, msg, sigs, table):
+		sigs = {}
+		for sig in sig_table.find({message.SIGNED_MESSAGE:id}):
+			del sig['_id']
+			sigs[sig[message.ID]] = message.Message(sig)
+		
+		return message.Message(m),sigs
+		
+	def add_message_to_table(self, msg, sigs, is_verified):
 		'add message to table, consider there is no such message yet'
 		#there is no point in adding existing message, so no verification is done
 		#to add signatures to an existing message, use add_signatures
 		
-		m = msg.data.copy()
+		msg_table = self.message
+		if not is_verified:
+			msg_table = self.unverified_message
+		
+		log.debug('db insert message %s'%(msg.id()))
+		msg_table.insert(msg.data.copy())
+		
 		if sigs:
-			si = {}
-			if isinstance(sigs, message.Message):
-				si[sigs.id()] = sigs.data.copy()
-			else:
-				for s in sigs.values():
-					si[s.id()] = s.data
-				
-			m[message.SIGNATURE_LIST] = {}
-			m[message.SIGNATURE_LIST].update(si)
-			
-		table.insert(m)
+			self.add_signature_to_table(sigs, is_verified)
 	
-	def add_signature_to_table(self, msg, signatures, table):
+	def add_signature_to_table(self, sigs, is_verified):
 		'add more signatures to an existing message'
-		msg_id = None
-		if isinstance(msg, message.Message):
-			msg_id = msg.id()
+
+		if not sigs:
+			return None
+		
+		sig_table = self.signature
+		if not is_verified:
+			sig_table = self.unverified_signature
+			
+		if isinstance(sigs, message.Message):
+			log.debug('db insert message signature %s'%(sigs.id()))
+			sig_table.insert(sigs.data.copy())
 		else:
-			msg_id = msg
-		m = table.find_one({message.ID:msg_id})
-		if not m:
-			log.error('message %s not found in db'%(msg.id()))
-			return None
-		if not message.SIGNATURE_LIST in m:
-			m[message.SIGNATURE_LIST] = {}
-		old_signatures_count = len(m[message.SIGNATURE_LIST])
-		m[message.SIGNATURE_LIST].update(message.message_dict_to_plain(signatures))
-		new_signatures_count = len(m[message.SIGNATURE_LIST])
-		if old_signatures_count == new_signatures_count:
-			log.info('no new signatures added, to message %s'%(msg_id))
-			return None
-		log.info('adding %s new signatures to message %s'%((new_signatures_count - old_signatures_count), msg_id))
-		table.save(m)
+			for s in sigs.values():
+				log.debug('db insert message signature %s'%(s.id()))
+				sig_table.insert(s.data.copy())
 		
 	def get_message(self, id):
 		'get verified and signed message with its signature if available'
-		return self.get_message_from_table(id, self.message)
-		
-		
-		msg = self.message.find_one({'id':id})
-		if not msg:
-			return None, None
-		log.debug('db message found %s'%(msg,))
-		m = msg.copy()
-		del m['_id']
-		signatures = None
-		if message.SIGNATURE_LIST in m:
-			signatures = m[message.SIGNATURE_LIST].copy()
-			del m[message.SIGNATURE_LIST]
-		return message.Message(m),message.to_message_dict(signatures)
+		return self.get_message_from_table(id, True)
 	
 	def add_message(self, msg, signature = None):
 		'no verification requied, considered message is yet unknown'
-		return self.add_message_to_table(msg, signature, self.message)
+		return self.add_message_to_table(msg, signature, True)
 
 	def add_message_unv(self, msg, signature = None):
 		'no verification requied, considered message is yet unknown'
-		return self.add_message_to_table(msg, signature, self.unverified_message)
+		return self.add_message_to_table(msg, signature, False)
 	
-	def add_signatures(self, sigs_dict, msg_id):
+	def add_signatures(self, sigs_dict):
 		'add dict of signatures for one single message'
-		return self.add_signature_to_table(msg_id, sigs_dict, self.message)
+		return self.add_signature_to_table(sigs_dict, True)
+
+	def get_unverified_signatures(self, user_id):
+		'find all unverified messages, signed with given user'
+		sigs = {}
+		for m in self.unverified_signature.find({message.USER:user_id}):
+			del m['_id']
+			sigs[m[message.ID]] = message.Message(m)
+		return sigs		
+	
+	def trust_signature(self, signature):
+		db_sig = self.unverified_signature.find_one({message.ID:signature.id()})
+		if not db_sig:
+			log.error('signature %s not found in unverified signatures'%(signature.id()))
+		self.unverified_signature.remove(db_sig)
+		self.signature.insert(db_sig)
 		
-		
-		for signature in sigs_dict.values():
-			self.add_signature(signature, msg_id)
+		msg = self.unverified_message.find_one({message.ID:signature.data[message.SIGNED_MESSAGE]})
+		if not msg:
+			log.error('message %s not found in unverified messages'%(signature.data[message.SIGNED_MESSAGE]))
+			return False
+		self.unverified_message.remove(msg)
+		m = msg.copy()
+		del m['_id']
+		self.message.insert(msg)
+		return message.Message(m)
 	
 	def add_signature_unussed(self, signature, msg_id):
 		'add valid, verified signature to an existing message'
