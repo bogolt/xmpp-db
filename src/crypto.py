@@ -69,9 +69,10 @@ def hash(data, htype=None):
 	'hash provided data with given algorithm'
 	if not htype:
 		htype = get_default_hash_algo()
-	if not htype in hashlib.algorithms:
-		log.error('hash type %s in unknown, hash failed'%(htype,))
-		return None
+	#Only p2.7 support this
+	#if not htype in hashlib.algorithms:
+	#	log.error('hash type %s in unknown, hash failed'%(htype,))
+	#	return None
 	h = hashlib.new(htype)
 	h.update(data)
 	return h.hexdigest()
