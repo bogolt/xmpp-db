@@ -5,20 +5,33 @@ import message
 msg_list = []
 objects = {}
 
-
 log = logging.getLogger('xmppdb')
 
 class Transport:
-	def __init__(self, name, on_recv, on_status):
+	def __init__(self, name, on_recv, on_status, on_user_command):
 		self.name = name
-		self.users = {}
+		self.users = set()
 		self.jid = '%s@test.org'%name
 		
 		self.recv_cb = on_recv
 		self.status_cb = on_status
+		self.user_command_cb = on_user_command
 		
 		global objects
 		objects[name] = self
+	
+	def connect(self, user):
+		global objects
+		if not user in objects:
+			log.error('unknown user %s'%user)
+			return
+		if user in self.users:
+			log.info('user %s already connected with %s'%(self.name, user))
+			return
+		
+		log.info('user %s adds %s to list of friends'%(self.name, user))
+		self.users.add(user)
+		objects[user].connect(self.name)
 	
 	def send(self, to, msg):
 		#log.info('%s -> %s [%s]'%self.name,to,msg)
@@ -30,6 +43,16 @@ class Transport:
 		
 	def status(self, user, status):
 		self.status_cb(user, status)
+		
+	def user_send(self, msg):
+		'message send from bot owner'
+		cmd, body = msg
+		if cmd=='jid':
+			log.info('request to add user %s'%body)
+			self.connect(body)
+		else:
+			log.error('unknown command %s received'%cmd)
+		
 		
 #msg = (request, body)
 #body = [msg]
@@ -49,12 +72,13 @@ class XmppDb:
 	def __init__(self, name):
 		self.name = name
 		self.client = client.XmppClient(name)
-		self.transport = Transport(name, self.recv, self.status)
+		self.transport = Transport(name, self.recv, self.status, self.user_command)
 		self.users = set()
 		#self.fill_friends()
 		
 		# don't care who signed jid, it does not matter
 		self.jid_msg = self.client.create_message({message.JID:self.transport.jid})
+	
 	
 	def recv(self, user, msg):
 		request,body = msg
@@ -79,13 +103,15 @@ class XmppDb:
 		for jid,_ in jids:
 			log.info('jid %s'%jid)
 	
-	def friend(self, user):
+	def send_jid_info(self, user):
 		#prepare messag with user key
-		m = (self.client.msg_public, [self.client.msg_public_selfsign])
+		m = (self.client.msg_public, {self.client.msg_public_selfsign.id():self.client.msg_public_selfsign})
 		# ask to be freinds, and send our public key
 		self.transport.send(user, req_put(m))
 		# add our signed jid
 		self.transport.send(user, req_put(self.jid_msg))
+		
+		#self.transport.send( user, req_friend(self.transport.jid) )
 		
 	def create(self, body):
 		msg, sig = self.client.create_message(body)
@@ -97,10 +123,15 @@ class XmppDb:
 	def add_user(self, user):
 		'command by external user'
 		pass
+	
+	def user_command(self, cmd, body):
+		'command received directly from the node user'
+#		if cmd=='jid':
+#			self.transport.
 
 def tick():
 	'emulate real time ticks, and events happening ( message sedning/receving )'
-	global msg_listc
+	global msg_list
 	global objects
 	tmp = []
 	tmp,msg_list = msg_list,tmp
@@ -109,9 +140,12 @@ def tick():
 
 print '\n\n\n'
 jahera = XmppDb('jahera')
-jahera.friend('jahera')
-jahera.fill_friends()
-#khalid = XmppDb('khalid')
+khalid = XmppDb('khalid')
 
-#jahera.friend('khalid')
+khalid.transport.user_send( ('jid', 'jahera') )
+
+#jahera.send_jid_info('khalid')
 #khalid.friend('jahera')
+tick()
+tick()
+tick()
