@@ -14,9 +14,10 @@ log.addHandler(h)
 log.setLevel(logging.DEBUG)
 
 class XmppClient:
-	def __init__(self, name):
+	def __init__(self, name, accept_selfsigned_cb):
 		log.info('initializing client %s'%(name,))
 		self.name = name
+		self.accept_selfsigned = accept_selfsigned_cb
 		self.db = db.Db(name)
 		self.key = crypto.PrivateKey(name)
 		self.make_public()
@@ -96,6 +97,21 @@ class XmppClient:
 		log.info('found public key %s for user %s'%(user,user_id))
 		return crypto.PublicKey(base64.b64decode( user.data[message.PUBLIC_KEY]) )
 	
+	def accept_public_key(self, id):
+		pkey = self.db.get_message_unv(id)
+		if not pkey:
+			log.error('message %s not found in unverified messages'%id)
+			return None
+		if not message.PUBLIC_KEY in pkey.data:
+			log.error('message %s is not a user id unable to accept'%id)
+			return None
+		
+		unv_sig = self.db.get_unverified_signatures(id)
+		if not unv_sig:
+			log.error('no signatures for user %s found'%id)
+			return None		
+
+	
 	def get_friends(self):
 		return self.db.get_friends()
 
@@ -117,9 +133,9 @@ class XmppClient:
 				continue
 			pubkey = self.get_public_key(s.data[message.USER])
 			if not pubkey:
-				if msg.id() == s.data[message.USER]:
+				# if this is self-signed message, and our policy tells us to accept it automatically, verify and accept it
+				if msg.id() == s.data[message.USER] and self.accept_selfsigned(msg.id()):
 					log.info('message %s is self-signed with signature %s'%(msg.id(),s.id()))
-					#TODO: suppose we always accept Self-Signed messages
 					pubkey = crypto.PublicKey(base64.b64decode( msg.data[message.PUBLIC_KEY] ))
 					if not pubkey.verify(msg.id(), base64.b64decode(s.data[message.SIGNATURE])):
 						log.error('invalid signature %s'%(s.id(),))
@@ -158,14 +174,25 @@ class XmppClient:
 		return True
 	
 	def accept_messages_from(self, id_msg):
-		unv_sigs = self.db.get_unverified_signatures(id_msg.id())
+		id = ''
+		pub_key_msg = None
+		if isinstance(id_msg, message.Message):
+			id = id_msg.id()
+			pub_key_msg = id_msg
+		else:
+			id = id_msg
+			pub_key_msg = self.db.get_message_unv(id)
+			if not pub_key_msg:
+				return None			
+			
+		unv_sigs = self.db.get_unverified_signatures(id)
 		if not unv_sigs:
 			return
-		log.info('found %s previously unverified signatures by user %s'%(len(unv_sigs), id_msg.id()))
+		log.info('found %s previously unverified signatures by user %s'%(len(unv_sigs), id))
 		# now verify this signatures one by one
-		pubkey = crypto.PublicKey(base64.b64decode( id_msg.data[message.PUBLIC_KEY]) )
+		pubkey = crypto.PublicKey(base64.b64decode( pub_key_msg.data[message.PUBLIC_KEY]) )
 		if not pubkey:
-			log.error('invalid public key %s, unable to verify messages'%(id_msg.id()))
+			log.error('invalid public key %s, unable to verify messages'%(id,))
 			return False
 		
 		pub_keys = []
@@ -226,14 +253,14 @@ class XmppClient:
 
 
 def key_chain_test():
-	montaron = XmppClient('monthy')
+	montaron = XmppClient('monthy', None)
 	m,s = montaron.create_message( {'test':'hey'} )
 
-	jahera = XmppClient('jahera')
+	jahera = XmppClient('jahera', None)
 	#Jahera receives message from unknown ID ( Monthy )
 	jahera.receive(m,s)
 	
-	xzar = XmppClient('xzar')
+	xzar = XmppClient('xzar', None)
 	xzar.receive(montaron.msg_public, montaron.msg_public_selfsign)
 	xzar_monthy_sign = xzar.sign_message(montaron.msg_public)
 	
@@ -244,4 +271,4 @@ def key_chain_test():
 	jahera.receive(montaron.msg_public, xzar_monthy_sign)
 	
 	
-key_chain_test()
+#key_chain_test()

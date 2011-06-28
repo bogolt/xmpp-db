@@ -47,11 +47,24 @@ class Transport:
 	def user_send(self, msg):
 		'message send from bot owner'
 		cmd, body = msg
+		log.info('received from owner command %s, text %s'%(cmd,body))
 		if cmd=='jid':
 			log.info('request to add user %s'%body)
 			self.connect(body)
+		elif cmd=='y' or cmd=='Y':
+			log.info('user accepted')
+			self.user_command_cb('accept', body)
+		elif cmd=='n':
+			self.user_command_cb('reject', body)
+		elif cmd=='accept':
+			self.user_command_cb('accept', body)
 		else:
 			log.error('unknown command %s received'%cmd)
+			self.user_command_cb()
+	
+	def user_recv(self, msg):
+		'message bot send to user'
+		log.info('sending message %s to user %s'%(msg,self.name))
 		
 		
 #msg = (request, body)
@@ -69,17 +82,28 @@ def req_put(msg):
 	return ('put', msg)
 	
 class XmppDb:
-	def __init__(self, name):
+	def __init__(self, name, auto_accept = False):
 		self.name = name
-		self.client = client.XmppClient(name)
+		self.client = client.XmppClient(name, self.accept_selfsigned)
 		self.transport = Transport(name, self.recv, self.status, self.user_command)
 		self.users = set()
+		self.auto_accept_selfsigned = auto_accept
+
 		#self.fill_friends()
 		
 		# don't care who signed jid, it does not matter
 		self.jid_msg = self.client.create_message({message.JID:self.transport.jid})
+		
+		self.pending_selfsigned = None
 	
-	
+	def accept_selfsigned(self, id):
+		'invoked by client if the received id is selfsigned only, need to know'
+		if self.auto_accept_selfsigned:
+			return True
+		self.pending_selfsigned = id
+		self.transport.user_recv('user %s request your friendship. Accept? y/n'%(self.pending_selfsigned,))
+		return False
+
 	def recv(self, user, msg):
 		request,body = msg
 		if request == 'get':
@@ -126,8 +150,16 @@ class XmppDb:
 	
 	def user_command(self, cmd, body):
 		'command received directly from the node user'
-#		if cmd=='jid':
-#			self.transport.
+		if cmd=='accept':
+			if body:
+				log.info('owner request to accept user %s'%(body,))
+				self.client.accept_messages_from(body)
+			elif self.pending_selfsigned:				
+				log.info('owner request to accept user %s'%(self.pending_selfsigned,))
+				self.client.accept_messages_from(self.pending_selfsigned)
+				self.pending_selfsigned = None
+			else:
+				log.error('nothing to accept')
 
 def tick():
 	'emulate real time ticks, and events happening ( message sedning/receving )'
@@ -140,12 +172,14 @@ def tick():
 
 print '\n\n\n'
 jahera = XmppDb('jahera')
-khalid = XmppDb('khalid')
+khalid = XmppDb('khalid', True)
 
-khalid.transport.user_send( ('jid', 'jahera') )
+khalid.send_jid_info('jahera')
 
-#jahera.send_jid_info('khalid')
-#khalid.friend('jahera')
 tick()
+
+jahera.transport.user_send( ('y',None) )
 tick()
+
+jahera.send_jid_info('khalid')
 tick()
