@@ -1,5 +1,6 @@
 import client
 import logging
+import message
 
 msg_list = []
 objects = {}
@@ -11,6 +12,7 @@ class Transport:
 	def __init__(self, name, on_recv, on_status):
 		self.name = name
 		self.users = {}
+		self.jid = '%s@test.org'%name
 		
 		self.recv_cb = on_recv
 		self.status_cb = on_status
@@ -48,7 +50,11 @@ class XmppDb:
 		self.name = name
 		self.client = client.XmppClient(name)
 		self.transport = Transport(name, self.recv, self.status)
-		self.users={}
+		self.users = set()
+		#self.fill_friends()
+		
+		# don't care who signed jid, it does not matter
+		self.jid_msg = self.client.create_message({message.JID:self.transport.jid})
 	
 	def recv(self, user, msg):
 		request,body = msg
@@ -56,13 +62,30 @@ class XmppDb:
 			pass
 		elif request == 'put':
 			self.client.receive(body[0], body[1])
+		elif request == 'friend':
+			if user in self.users:
+				log.info('friendship with %s established'%user)
+				self.users.insert(user)
+				self.fill_friends()
+			#auto accept friends for now
+			#self.client.receive(body[0], body[1])
+			
 		else:
 			log.error('unknown request type %s'%(request,))
+	
+	def fill_friends(self):
+		jids = self.client.get_friends()
+		log.info('signed jids')
+		for jid,_ in jids:
+			log.info('jid %s'%jid)
 	
 	def friend(self, user):
 		#prepare messag with user key
 		m = (self.client.msg_public, [self.client.msg_public_selfsign])
-		self.transport.send(user, req_friend(m))
+		# ask to be freinds, and send our public key
+		self.transport.send(user, req_put(m))
+		# add our signed jid
+		self.transport.send(user, req_put(self.jid_msg))
 		
 	def create(self, body):
 		msg, sig = self.client.create_message(body)
@@ -84,8 +107,11 @@ def tick():
 	for frm,to,msg in tmp:
 		objects[to].received(frm, msg)
 
+print '\n\n\n'
 jahera = XmppDb('jahera')
-khalid = XmppDb('khalid')
+jahera.friend('jahera')
+jahera.fill_friends()
+#khalid = XmppDb('khalid')
 
-jahera.friend('khalid')
-khalid.friend('jahera')
+#jahera.friend('khalid')
+#khalid.friend('jahera')

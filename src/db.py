@@ -46,7 +46,25 @@ class Db:
 		m = msg.copy()
 		del msg['_id']
 		return message.Message(m)
-		
+	
+	def get_signatures(self, id):
+		'get signatures for msg id specified'
+		sigs = {}
+		for sig in self.signature.find({message.SIGNED_MESSAGE:id}):
+			del sig['_id']
+			sigs[sig[message.ID]] = message.Message(sig)
+		return sigs
+	
+	def get_messages(self, type, value):
+		msgs = self.message.find({type:value})	
+		msg_list = []
+		for m in msgs:
+			del m['_id']
+			if message.TYPE in m:
+				del m[message.TYPE]
+			msg_list.append( (m.copy(), self.get_signatures(m[message.ID])) )
+		return msg_list
+	
 	def get_message_from_table(self, id, is_verified):
 		'get message from given table - eighter save or not'
 		
@@ -62,6 +80,8 @@ class Db:
 		log.debug('db message found %s'%(msg,))
 		m = msg.copy()
 		del m['_id']
+		if message.TYPE in m:
+			del m[message.TYPE]
 		
 		sigs = {}
 		for sig in sig_table.find({message.SIGNED_MESSAGE:id}):
@@ -75,12 +95,21 @@ class Db:
 		#there is no point in adding existing message, so no verification is done
 		#to add signatures to an existing message, use add_signatures
 		
+		log.info('adding to db msg %s'%msg.data[message.ID])
+		
 		msg_table = self.message
 		if not is_verified:
 			msg_table = self.unverified_message
 		
 		log.debug('db insert message %s'%(msg.id()))
-		msg_table.insert(msg.data.copy())
+		
+		m = msg.data.copy()
+		if message.PUBLIC_KEY in m:
+			m[message.TYPE] = message.PUBLIC_KEY
+		elif message.JID in m:
+			m[message.TYPE] = message.JID
+		
+		msg_table.insert(m)
 		
 		if sigs:
 			self.add_signature_to_table(sigs, is_verified)
@@ -102,6 +131,9 @@ class Db:
 			for s in sigs.values():
 				log.debug('db insert message signature %s'%(s.id()))
 				sig_table.insert(s.data.copy())
+	
+	def get_friends(self):
+		return self.get_messages(message.TYPE, message.JID)
 		
 	def get_message(self, id):
 		'get verified and signed message with its signature if available'

@@ -11,6 +11,8 @@ PUBLIC_KEY='public_key'
 SIGNATURE='signature'
 USER='user'
 SIGNED_MESSAGE='signed_message'
+JID='jid'
+TYPE='type'
 
 def exteract_value(message, name):
 	value = message[name]

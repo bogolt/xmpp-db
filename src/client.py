@@ -95,6 +95,9 @@ class XmppClient:
 			return None
 		log.info('found public key %s for user %s'%(user,user_id))
 		return crypto.PublicKey(base64.b64decode( user.data[message.PUBLIC_KEY]) )
+	
+	def get_friends(self):
+		return self.db.get_friends()
 
 	def process_signatures(self, sign, msg):
 		valid_signs = {}
@@ -197,7 +200,14 @@ class XmppClient:
 		dbmsg,sign = self.db.get_message(msg.id())
 		if dbmsg:
 			log.info('message %s already exists in the db'%(dbmsg,))
-			return dbmsg,sign
+			if self.is_selfsigned(sign):
+				return dbmsg,sign
+			else:
+				log.info('message %s is not signed by this user, sign it'%msg.id())
+				signature = self.sign(msg)
+				selfsign = self.db.add_signatures(signature)
+				sign[selfsign.data[message.USER]] = selfsign
+				return msg,sign
 		else:
 			log.info('message %s not found in the db'%(msg.id()))
 		signature = self.sign(msg)
