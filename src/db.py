@@ -25,6 +25,9 @@ class Db:
 		self.unverified_message.remove()
 		
 		self.show()
+		
+		#recent messages
+		self.recent = []
 
 	def debug_clear(self):
 		self.message.remove()
@@ -108,11 +111,22 @@ class Db:
 			m[message.TYPE] = message.PUBLIC_KEY
 		elif message.JID in m:
 			m[message.TYPE] = message.JID
+			
+		msg_db = msg_table.find_one({message.ID:msg.id()})
+		if msg_db:
+			return None
 		
+		self.recent.append(msg)
 		msg_table.insert(m)
 		
 		if sigs:
 			self.add_signature_to_table(sigs, is_verified)
+	
+	def get_recent(self):
+		'recently received ( signed ) messages'
+		r = []
+		r,self.recent = self.recent,r
+		return r
 	
 	def add_signature_to_table(self, sigs, is_verified):
 		'add more signatures to an existing message'

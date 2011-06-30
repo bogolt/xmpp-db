@@ -36,7 +36,13 @@ class Transport:
 	def send(self, to, msg):
 		#log.info('%s -> %s [%s]'%self.name,to,msg)
 		msg_list.append( (self.name, to, msg) )
-		
+	
+	def add_user(self, jid):
+		log.debug('request to add new jid %s'%(jid,))
+		if not jid in self.users:
+			log.info('user %s added new jid %s'%(self.name, jid))
+			self.users.add(jid)
+	
 	def received(self, frm, msg):
 		#log.info('%s <- %s [%s]'%self.name,frm,msg)
 		self.recv_cb(frm, msg)
@@ -95,6 +101,8 @@ class XmppDb:
 		self.jid_msg = self.client.create_message({message.JID:self.transport.jid})
 		
 		self.pending_selfsigned = None
+		
+		self.db = self.client.db
 	
 	def accept_selfsigned(self, id):
 		'invoked by client if the received id is selfsigned only, need to know'
@@ -120,6 +128,12 @@ class XmppDb:
 			
 		else:
 			log.error('unknown request type %s'%(request,))
+			return
+		
+		msgs = self.db.get_recent()
+		for m in msgs:
+			if message.JID in m.data:
+				self.transport.add_user(m.data[message.JID])
 	
 	def fill_friends(self):
 		jids = self.client.get_friends()
