@@ -1,7 +1,7 @@
 xmpp-db is a disctributed content storage. Data is spread through xmpp-bots which communicate with each other as well as with user itself ( using his primary xmpp-account)
 
 Each user identified by his public key.
-Each message posted by the user - is siged with his public key.
+Each message posted by the user - is siged with his private key.
 
 Message is a key-value structure, with only mandatory attribute - id, which is hash of the rest of key-value pairs.
 
