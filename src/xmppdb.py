@@ -11,7 +11,7 @@ class Transport:
 	def __init__(self, name, on_recv, on_status, on_user_command):
 		self.name = name
 		self.users = set()
-		self.jid = '%s@test.org'%name
+		self.jid = name
 		
 		self.recv_cb = on_recv
 		self.status_cb = on_status
@@ -33,6 +33,10 @@ class Transport:
 		self.users.add(user)
 		objects[user].connect(self.name)
 	
+	def send_all(self, msg):
+		for user in self.users:
+			self.send(user, msg)
+	
 	def send(self, to, msg):
 		#log.info('%s -> %s [%s]'%self.name,to,msg)
 		msg_list.append( (self.name, to, msg) )
@@ -42,6 +46,15 @@ class Transport:
 		if not jid in self.users:
 			log.info('user %s added new jid %s'%(self.name, jid))
 			self.users.add(jid)
+	
+	def notify_owner(self, msg):
+		'notify bot owner about new message he may be interested in'
+		text = ''
+		if message.PUBLIC_KEY in msg.data:
+			text = 'public key'
+		elif message.TEXT in msg.data:
+			text = msg.data[message.TEXT]
+		self.user_recv('message %s [%s]'%(msg.id(),text))
 	
 	def received(self, frm, msg):
 		#log.info('%s <- %s [%s]'%self.name,frm,msg)
@@ -70,8 +83,7 @@ class Transport:
 	
 	def user_recv(self, msg):
 		'message bot send to user'
-		log.info('sending message %s to user %s'%(msg,self.name))
-		
+		log.info('sending message <%s> to user %s'%(msg,self.name))
 		
 #msg = (request, body)
 #body = [msg]
@@ -134,6 +146,8 @@ class XmppDb:
 		for m in msgs:
 			if message.JID in m.data:
 				self.transport.add_user(m.data[message.JID])
+			if m.data.has_key(message.TEXT) or m.data.has_key(message.PUBLIC_KEY):
+				self.transport.notify_owner(m)
 	
 	def fill_friends(self):
 		jids = self.client.get_friends()
@@ -153,7 +167,7 @@ class XmppDb:
 		
 	def create(self, body):
 		msg, sig = self.client.create_message(body)
-		self.transport.send(user, req_put(m))
+		self.transport.send_all(req_put((msg,sig)))
 	
 	def status(self, user, status):
 		pass
@@ -196,4 +210,7 @@ jahera.transport.user_send( ('y',None) )
 tick()
 
 jahera.send_jid_info('khalid')
+tick()
+
+jahera.create({message.TEXT:'hey khalid, what\'s up'})
 tick()

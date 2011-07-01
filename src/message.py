@@ -13,6 +13,7 @@ USER='user'
 SIGNED_MESSAGE='signed_message'
 JID='jid'
 TYPE='type'
+TEXT='text'
 
 def exteract_value(message, name):
 	value = message[name]
