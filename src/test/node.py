@@ -25,7 +25,13 @@ class Transport:
 	def unlink(self, jid):
 		pass
 		
-
+class NodeDb:
+	def __init__(self, name):
+		self.name = name
+		
+	
+	#def setNodeInfo(self, node):
+		
 
 class LocalTransport(Transport):
 	
@@ -73,27 +79,29 @@ class Node:
 	def __init__(self, jid, transportType):
 		self.jid = jid
 		self.linked = set()
+		self.nodes = {}
 		
 		self.block_list = set()
 		
 		self.transport = transportType(self)
 	
 	def link(self, jid):
-		if jid in self.linked:
-			log.error('jid %s already linked to %s'%(jid, self.jid))
-			return False
-		self.transport.link(jid)
-		self.linked.add(jid)
-		log.info('jid %s is now linked with %s'%(jid, self.jid))
-		return True
+		if self.transport.link(jid):
+			self.linked.add(jid)
+			log.info('%s--%s linked OK'%(self.jid, jid))
+			return True
+		
+		log.error('%s-|-%s'%(self.jid, jid))
+		return False
 		
 	def unlink(self, jid):
-		if jid in self.linked:
-			self.transport.unlink(jid)
+		
+		if self.transport.unlink(jid):
 			self.linked.remove(jid)
-			log.info('removing jid %s from %s linked list'%(jid, self.jid))
+			log.info('%s||%s unlinked OK'%(self.jid, jid))
 			return True
-		log.error('jid %s not found in %s linked list - unable to remove'%(jid, self.jid))
+			
+		log.error('%s-||-%s'%(self.jid, jid))
 		return False
 		
 	def send(self, to_node, msg):
@@ -103,8 +111,15 @@ class Node:
 		log.info('node %s see %s as %s'%(self.jid, jid, 'online' if online else 'offline'))
 		
 		if online:
+			self.linked.add(jid)
+			if not jid in self.nodes:
+				self.nodes[jid] = {}
+			
 			self.requestLinkedNodes(jid)
 			self.updateLinkedNodes(jid)
+			
+		else:
+			self.linked.remove(jid)
 			
 	def requestLinkedNodes(self, jid):
 		self.send(jid, make_request_linked_nodes(jid))
@@ -124,9 +139,14 @@ class Node:
 			self.block_list.add(from_node)
 			self.unlink(from_node)
 	
-	def make_node_info(self):
-		return {'node':{'jid':self.jid, 'link':[node for node in self.linked]}}
+	def make_node_info(self, jid):
+		if jid == self.jid:
+			return {'node':{'jid':self.jid, 'link':[node for node in self.linked]}}
+		if not jid in self.nodes:
+			return {'node':{'jid':self.jid, 'error':'unknown'}}
 		
+		return {'node':{'jid':self.jid, 'link':[{'jid':node,'link':len(links)} for node,links in self.nodes[jid].items()]}}
+	
 	
 	def process_message(self, jid, msg):
 		for key, data in msg.items():
@@ -139,10 +159,31 @@ class Node:
 				self.processLinkedNodeInfo(jid, data)
 	
 	def processNodeInfo(self, jid, node):
-		pass
+		friends = {}
+		for n in node['link']:
+			friends[n] = (0,0)
+		self.nodes[node['jid']] = friends
+		
+		#analyse distance
+		#nodes = self.getDistantNode()
+		#for node in nodes:
+		n = self.getDistantNode()
+		if n:
+			self.link(n)
+			
+	def getDistantNode(self):
+		for prime in self.linked:
+			if not prime in self.nodes:
+				continue
+			
+			for node in self.nodes[prime]:
+				if node in self.linked:
+					continue
+					
+			
 	
 	def processLinkedNodesRequest(self, jid, data):
-		pass
+		self.send(jid, self.make_node_info(self.jid))
 		
 	def processLinkedNodeInfo(self, jid, node):
 		pass
@@ -163,7 +204,9 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('z')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('c')+1)], LocalTransport)
+tick()
+tick()
 tick()
 
 #log.info(':: %s'%(a.make_node_info()))
