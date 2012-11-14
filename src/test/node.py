@@ -96,27 +96,27 @@ class Node:
 		if self.transport.link(jid):
 			#self.db.add_node(jid, True)
 			#self.linked_nodes[Node.NodeNeighbors].add(jid)
-			log.info('%s--%s linked OK'%(self.jid, jid))
+			log.info('[%s] connected with %s'%(self.jid, jid))
 			return True
 		
-		log.error('%s-|-%s'%(self.jid, jid))
+		log.error('[%s] can not connect with %s'%(self.jid, jid))
 		return False
 		
 	def unlink(self, jid):
 		
 		if self.transport.unlink(jid):
 			#self.linked_nodes[Node.NodeNeighbors].remove(jid)
-			log.info('%s||%s unlinked OK'%(self.jid, jid))
+			log.info('[%s] disconnected from %s'%(self.jid, jid))
 			return True
 			
-		log.error('%s-||-%s'%(self.jid, jid))
+		log.error('[%s] can not disconnect from %s'%(self.jid, jid))
 		return False
 		
 	def send(self, to_node, msg):
 		self.transport.send(to_node, json.dumps(msg))
 		
 	def status_changed(self, jid, online):
-		log.info('node %s see %s as %s'%(self.jid, jid, 'online' if online else 'offline'))
+		log.info('[%s] %s %s'%(self.jid, jid, 'available' if online else 'unavailable'))
 		is_new_node = self.db.set_node_status(jid, online, is_linked = True)
 		
 		if online:
@@ -136,7 +136,7 @@ class Node:
 	#			self.send( node, make_linked_node(jid) )
 		
 	def received(self, from_node, msg):
-		log.info("node %s received message from %s: %s"%(self.jid, from_node, msg))
+		#log.info("[%s] got msg received message from %s: %s"%(self.jid, from_node, msg))
 		message = None
 		try:
 			message = json.loads(msg)
@@ -148,9 +148,9 @@ class Node:
 			self.process_message(from_node, message)
 	
 	def make_node_info(self, jid):
-		log.info('%s requested nodes of %s'%(self.jid, jid))
+		#log.info('%s requested nodes of %s'%(self.jid, jid))
 		linked = self.db.get_linked_nodes(jid)
-		log.info('%s got linked nodes for %s %s'%(self.jid, jid, linked))
+		#log.info('%s got linked nodes for %s %s'%(self.jid, jid, linked))
 		if not linked:
 			return {'node':{'jid':jid, 'error':'unknown'}}
 		return {'node':{'jid':jid, 'link': linked } }
@@ -168,19 +168,28 @@ class Node:
 				self.processLinkedNodeInfo(jid, data)
 
 	def processNodeInfoRequest(self, jid, node):
+		log.info('[%s] request from %s to get node info of %s'%(self.jid, jid, node['jid'],))
 		self.send(jid, self.make_node_info(node['jid']))
 	
 	def processNodeInfo(self, jid, data):
 		if 'error' in data:
-			log.error('failed to get node %s info'%(data['jid']))
+			log.error('[%s] request from %s failed to get node %s info'%(self.jid, jid, data['jid']))
 			return
-		self.db.set_node_info(data)
+		log.info('[%s] from %s node info: %s'%(self.jid, jid, data))
+		newly_linked = self.db.set_node_info(data)
+		for node in newly_linked:
+			if node == jid or node == self.jid:
+				continue
+			log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
+			self.requestNodeInfo(jid, node)
 	
 	def processLinkedNodesRequest(self, jid, data):
+		log.info('[%s] request from %s to get linked node info of %s'%(self.jid, jid, node['jid'],))
 		self.send(jid, self.make_node_info(self.jid))
 		
 	def processLinkedNodeInfo(self, jid, node):
 		pass
+		
 
 def makeLinkedNodes(keys, transport):
 	prev = None
@@ -196,12 +205,20 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('d')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('c')+1)], LocalTransport)
 tick()
 tick()
 tick()
+#for node in alpha:
+#	node.requestNodes(1)
 
-alpha[1].requestNodeInfo('c', 'd')
+#alpha[1].requestNodeInfo('c', 'd')
+tick()
+tick()
+tick()
+tick()
+tick()
+tick()
 tick()
 tick()
 

@@ -75,8 +75,9 @@ class Db:
 
 	def set_linked(self, id_a, id_b):
 		if self.is_linked(id_a, id_b):
-			return
+			return False
 		self.conn.cursor().execute("insert into link (id_a, id_b) values (?, ?)", (id_a, id_b))
+		return True
 
 	def set_node_info(self, data):
 		
@@ -84,8 +85,12 @@ class Db:
 		node_id = self.set_node(jid)
 		
 		#now add it's linked nodes
+		newly_linked = set()
 		for linked_node in data['link']:
-			self.set_linked(node_id, self.set_node(linked_node))
+			if self.set_linked(node_id, self.set_node(linked_node)):
+				if self.jid != linked_node:
+					newly_linked.add( linked_node )
+		return newly_linked
 		
 	def remove_links(self, jid):
 		node_id = self.get_node_id(jid)
@@ -93,6 +98,26 @@ class Db:
 			return False
 		self.cur.execute('delete from link where id_a=?', (node_id,))
 		return True
+		
+	def get_linked_layer_nodes(self, jid, layer = 1):
+		node_id = self.get_node_id(jid)
+		#if not node_id:
+		#	return None
+			
+		#for l in range(0, layer):
+		#	layers = self.get_linked_ids(node_id)
+		#	for j in layers:
+		#		nid = self.get_node_id(j)
+		#		self.get_linked_nodes(nid)
+	
+	def get_linked_ids(self, node_id):
+		cur = self.conn.cursor()
+		cur.execute("select id_b from link where id_a = ?", (node_id,))
+		layer = set()
+		for r in cur.fetchall():
+			layer.add(int(r[0]))
+		return layer
+		
 		
 	def get_linked_nodes(self, jid):
 		
@@ -103,7 +128,6 @@ class Db:
 		cur = self.conn.cursor()
 		cur.execute("select node.jid from node join link on node.id = link.id_b where link.id_a = ?", (node_id,))
 		return [r[0] for r in cur.fetchall()]
-		
 
 x = Db()
 if x.set_node('test'):
