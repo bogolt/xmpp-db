@@ -1,5 +1,6 @@
 import json
 import logging
+import node_db
 
 log = logging.getLogger('infonet')
 
@@ -79,18 +80,22 @@ def make_request(req, jid):
 	return {'request' : { 'jid':jid, 'type':req} }
 
 class Node:
+	#number of user circles stored in node memory
+	N = 3
+	
+	Neighbors = 0
+	
 	def __init__(self, jid, transportType):
 		self.jid = jid
-		self.linked = set()
-		self.nodes = {}
-		
-		self.block_list = set()
+		self.db = node_db.Db()
+		self.db.set_self(self.jid)
 		
 		self.transport = transportType(self)
 	
 	def link(self, jid):
 		if self.transport.link(jid):
-			self.linked.add(jid)
+			#self.db.add_node(jid, True)
+			#self.linked_nodes[Node.NodeNeighbors].add(jid)
 			log.info('%s--%s linked OK'%(self.jid, jid))
 			return True
 		
@@ -100,7 +105,7 @@ class Node:
 	def unlink(self, jid):
 		
 		if self.transport.unlink(jid):
-			self.linked.remove(jid)
+			#self.linked_nodes[Node.NodeNeighbors].remove(jid)
 			log.info('%s||%s unlinked OK'%(self.jid, jid))
 			return True
 			
@@ -112,20 +117,11 @@ class Node:
 		
 	def status_changed(self, jid, online):
 		log.info('node %s see %s as %s'%(self.jid, jid, 'online' if online else 'offline'))
+		is_new_node = self.db.set_node_status(jid, online, is_linked = True)
 		
 		if online:
-			self.linked.add(jid)
-			if not jid in self.nodes:
-				self.nodes[jid] = {}
-			
 			self.requestNodeInfo(jid)
-			#self.requestLinkedNodes(jid)
-			#self.updateLinkedNodes(jid)
-			
-		else:
-			self.linked.remove(jid)
-		
-		log.info('node %s linked nodes: %s'%(self.jid, self.linked))
+		# reconnect with it's friends		
 			
 	def requestLinkedNodes(self, jid):
 		self.send(jid, make_request_linked_nodes(jid))
@@ -133,10 +129,11 @@ class Node:
 	def requestNodeInfo(self, jid):
 		self.send(jid, make_request('node-info', jid))
 		
-	def updateLinkedNodes(self, jid):
-		for node in self.linked:
-			if node != jid:
-				self.send( node, make_linked_node(jid) )
+	#def updateLinkedNodes(self, jid):
+	#	for node in self.linked_nodes[Node.NodeNeighbors]:
+	#		if node != jid:
+	#			self.send( node, make_linked_node(jid) )
+	#			self.send( node, make_linked_node(jid) )
 		
 	def received(self, from_node, msg):
 		log.info("node %s received message from %s: %s"%(self.jid, from_node, msg))
@@ -152,14 +149,11 @@ class Node:
 	
 	def make_node_info(self, jid):
 		log.info('%s requested nodes of %s'%(self.jid, jid))
-		if jid == self.jid:
-			log.info('get %s my node info, lined %s'%(self.jid, self.linked))
-			return {'node':{'jid':self.jid, 'link':[node for node in self.linked]}}
-		if not jid in self.nodes:
+		linked = self.db.get_linked_nodes(jid)
+		log.info('%s got linked nodes for %s %s'%(self.jid, jid, linked))
+		if not linked:
 			return {'node':{'jid':self.jid, 'error':'unknown'}}
-		
-		return {'node':{'jid':self.jid, 'link':[{'jid':node,'link':len(links)} for node,links in self.nodes[jid].items()]}}
-	
+		return {'node':{'jid':self.jid, 'link': linked } }
 	
 	def process_message(self, jid, msg):
 		for key, data in msg.items():
@@ -177,48 +171,16 @@ class Node:
 		self.send(jid, self.make_node_info(node['jid']))
 	
 	def processNodeInfo(self, jid, data):
-		nd = node['jid']
-		
-		node = {}
-		if nd in self.nodes:
-			node = self.nodes[nd]
-		
-		for n in data['link']:
-			if not n in node:
-				node[n] = (0,0)
-
-		#self.nodes[node['jid']] = friends
-		
-		#analyse distance
-		#nodes = self.getDistantNode()
-		#for node in nodes:
-		n = self.getDistantNode()
-		if n:
-			self.link(n)
-			
-	def getDistantNode(self):
-		for prime in self.linked:
-			if not prime in self.nodes:
-				continue
-			
-			for node in self.nodes[prime]:
-				if node in self.linked:
-					continue
-					
-			
+		if 'error' in data:
+			log.error('failed to get node %s info'%(data['jid']))
+			return
+		self.db.set_node_info(data)
 	
 	def processLinkedNodesRequest(self, jid, data):
 		self.send(jid, self.make_node_info(self.jid))
 		
 	def processLinkedNodeInfo(self, jid, node):
-		nd = node['jid']
-		if not nd in self.nodes:
-			self.nodes[nd] = {}
-			
-		for linked in node['linked']:
-			if not linked in self.nodes[nd]:
-				self.nodes[nd][linked] = {}
-		log.info(self.nodes)
+		pass
 
 def makeLinkedNodes(keys, transport):
 	prev = None
