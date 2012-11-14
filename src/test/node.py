@@ -74,6 +74,9 @@ def make_request_linked_nodes(jid):
 
 def make_linked_node(jid):
 	return {'linked-node':jid}
+	
+def make_request(req, jid):
+	return {'request' : { 'jid':jid, 'type':req} }
 
 class Node:
 	def __init__(self, jid, transportType):
@@ -115,14 +118,20 @@ class Node:
 			if not jid in self.nodes:
 				self.nodes[jid] = {}
 			
-			self.requestLinkedNodes(jid)
-			self.updateLinkedNodes(jid)
+			self.requestNodeInfo(jid)
+			#self.requestLinkedNodes(jid)
+			#self.updateLinkedNodes(jid)
 			
 		else:
 			self.linked.remove(jid)
+		
+		log.info('node %s linked nodes: %s'%(self.jid, self.linked))
 			
 	def requestLinkedNodes(self, jid):
 		self.send(jid, make_request_linked_nodes(jid))
+	
+	def requestNodeInfo(self, jid):
+		self.send(jid, make_request('node-info', jid))
 		
 	def updateLinkedNodes(self, jid):
 		for node in self.linked:
@@ -131,16 +140,20 @@ class Node:
 		
 	def received(self, from_node, msg):
 		log.info("node %s received message from %s: %s"%(self.jid, from_node, msg))
+		message = None
 		try:
 			message = json.loads(msg)
-			self.process_message(from_node, message)
 		except TypeError as e:
 			log.error("json parse error: %s"%(e,))
 			self.block_list.add(from_node)
 			self.unlink(from_node)
+		if message:
+			self.process_message(from_node, message)
 	
 	def make_node_info(self, jid):
+		log.info('%s requested nodes of %s'%(self.jid, jid))
 		if jid == self.jid:
+			log.info('get %s my node info, lined %s'%(self.jid, self.linked))
 			return {'node':{'jid':self.jid, 'link':[node for node in self.linked]}}
 		if not jid in self.nodes:
 			return {'node':{'jid':self.jid, 'error':'unknown'}}
@@ -155,14 +168,26 @@ class Node:
 			elif key == 'request':
 				if data['type'] == 'linked-nodes':
 					self.processLinkedNodesRequest(jid, data)
+				elif data['type'] == 'node-info':
+					self.processNodeInfoRequest(jid, data)
 			elif key == 'linked-node':
 				self.processLinkedNodeInfo(jid, data)
+
+	def processNodeInfoRequest(self, jid, node):
+		self.send(jid, self.make_node_info(node['jid']))
 	
-	def processNodeInfo(self, jid, node):
-		friends = {}
-		for n in node['link']:
-			friends[n] = (0,0)
-		self.nodes[node['jid']] = friends
+	def processNodeInfo(self, jid, data):
+		nd = node['jid']
+		
+		node = {}
+		if nd in self.nodes:
+			node = self.nodes[nd]
+		
+		for n in data['link']:
+			if not n in node:
+				node[n] = (0,0)
+
+		#self.nodes[node['jid']] = friends
 		
 		#analyse distance
 		#nodes = self.getDistantNode()
@@ -186,9 +211,14 @@ class Node:
 		self.send(jid, self.make_node_info(self.jid))
 		
 	def processLinkedNodeInfo(self, jid, node):
-		pass
-	
-	
+		nd = node['jid']
+		if not nd in self.nodes:
+			self.nodes[nd] = {}
+			
+		for linked in node['linked']:
+			if not linked in self.nodes[nd]:
+				self.nodes[nd][linked] = {}
+		log.info(self.nodes)
 
 def makeLinkedNodes(keys, transport):
 	prev = None
@@ -204,7 +234,7 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('c')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('d')+1)], LocalTransport)
 tick()
 tick()
 tick()
