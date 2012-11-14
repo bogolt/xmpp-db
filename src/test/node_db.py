@@ -101,8 +101,7 @@ class Db:
 			return None
 		
 		cur = self.conn.cursor()
-		cur.execute("select node.jid from node join link on node.id = link.id_b where link.id_a = ?", (node_id,))# where node.=? join node on node.id = link.id_b", (node_id,))
-		#cur.execute("select node.jid from link where id_a=? join node on node.id = link.id_b", (node_id,))
+		cur.execute("select node.jid from node join link on node.id = link.id_b where link.id_a = ?", (node_id,))
 		return [r[0] for r in cur.fetchall()]
 		
 

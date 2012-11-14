@@ -126,8 +126,8 @@ class Node:
 	def requestLinkedNodes(self, jid):
 		self.send(jid, make_request_linked_nodes(jid))
 	
-	def requestNodeInfo(self, jid):
-		self.send(jid, make_request('node-info', jid))
+	def requestNodeInfo(self, jid, other_jid = None):
+		self.send(jid, make_request('node-info', other_jid if other_jid else jid))
 		
 	#def updateLinkedNodes(self, jid):
 	#	for node in self.linked_nodes[Node.NodeNeighbors]:
@@ -152,8 +152,8 @@ class Node:
 		linked = self.db.get_linked_nodes(jid)
 		log.info('%s got linked nodes for %s %s'%(self.jid, jid, linked))
 		if not linked:
-			return {'node':{'jid':self.jid, 'error':'unknown'}}
-		return {'node':{'jid':self.jid, 'link': linked } }
+			return {'node':{'jid':jid, 'error':'unknown'}}
+		return {'node':{'jid':jid, 'link': linked } }
 	
 	def process_message(self, jid, msg):
 		for key, data in msg.items():
@@ -198,6 +198,10 @@ def makeLinkedNodes(keys, transport):
 
 alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('d')+1)], LocalTransport)
 tick()
+tick()
+tick()
+
+alpha[1].requestNodeInfo('c', 'd')
 tick()
 tick()
 
