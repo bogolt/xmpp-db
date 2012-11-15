@@ -182,10 +182,13 @@ class Node:
 			if node == jid or node == self.jid:
 				continue
 			dist = self.db.get_distance(self.jid, node)
-			if dist and dist < Node.MaxDistance:
-				log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
-				self.requestNodeInfo(jid, node)
-			
+			if dist:
+				if dist < Node.MaxDistance:
+					log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
+					self.requestNodeInfo(jid, node)
+				#else:
+				#	log.info('[%s] connecting to node %s / distance %s'%(self.jid, node, dist))
+				#	self.link(node)
 	
 	def processLinkedNodesRequest(self, jid, data):
 		log.info('[%s] request from %s to get linked node info of %s'%(self.jid, jid, node['jid'],))
@@ -202,6 +205,9 @@ class Node:
 			print '-- %s %s'%(node, linked)
 			for ln in linked:
 				print '--- [%s, %s] = %s'%(self.jid, ln, self.db.get_distance(self.jid, ln))
+				
+	def connect_distant(self):
+		
 
 def makeLinkedNodes(keys, transport):
 	prev = None
@@ -217,7 +223,11 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('f')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('k')+1)], LocalTransport)
+tick()
+tick()
+tick()
+tick()
 tick()
 tick()
 tick()
@@ -225,14 +235,6 @@ tick()
 #	node.requestNodes(1)
 
 #alpha[1].requestNodeInfo('c', 'd')
-tick()
-tick()
-tick()
-tick()
-tick()
-tick()
-tick()
-tick()
 
 for a in alpha:
 	a.show_linked()
