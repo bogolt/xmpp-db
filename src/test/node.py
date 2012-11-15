@@ -84,6 +84,7 @@ class Node:
 	N = 3
 	
 	Neighbors = 0
+	MaxDistance = 3
 	
 	def __init__(self, jid, transportType):
 		self.jid = jid
@@ -180,8 +181,10 @@ class Node:
 		for node in newly_linked:
 			if node == jid or node == self.jid:
 				continue
-			log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
-			self.requestNodeInfo(jid, node)
+			dist = self.db.get_distance(self.jid, node)
+			if dist and dist < Node.MaxDistance:
+				log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
+				self.requestNodeInfo(jid, node)
 			
 	
 	def processLinkedNodesRequest(self, jid, data):
@@ -199,7 +202,6 @@ class Node:
 			print '-- %s %s'%(node, linked)
 			for ln in linked:
 				print '--- [%s, %s] = %s'%(self.jid, ln, self.db.get_distance(self.jid, ln))
-		
 
 def makeLinkedNodes(keys, transport):
 	prev = None
@@ -215,7 +217,7 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('e')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('f')+1)], LocalTransport)
 tick()
 tick()
 tick()
