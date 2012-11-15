@@ -182,6 +182,7 @@ class Node:
 				continue
 			log.info('[%s] request %s newly linked node %s'%(self.jid, jid, node))
 			self.requestNodeInfo(jid, node)
+			
 	
 	def processLinkedNodesRequest(self, jid, data):
 		log.info('[%s] request from %s to get linked node info of %s'%(self.jid, jid, node['jid'],))
@@ -189,6 +190,15 @@ class Node:
 		
 	def processLinkedNodeInfo(self, jid, node):
 		pass
+		
+	def show_linked(self):
+		known = self.db.get_nodes()
+		print '[%s] %s'%(self.jid, known)
+		for node in known:
+			linked = self.db.get_linked_nodes(node)
+			print '-- %s %s'%(node, linked)
+			for ln in linked:
+				print '--- [%s, %s] = %s'%(self.jid, ln, self.db.get_distance(self.jid, ln))
 		
 
 def makeLinkedNodes(keys, transport):
@@ -205,7 +215,7 @@ def makeLinkedNodes(keys, transport):
 		prev = node
 	return nodes
 
-alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('c')+1)], LocalTransport)
+alpha = makeLinkedNodes([chr(x) for x in range(ord('a'), ord('e')+1)], LocalTransport)
 tick()
 tick()
 tick()
@@ -221,5 +231,8 @@ tick()
 tick()
 tick()
 tick()
+
+for a in alpha:
+	a.show_linked()
 
 #log.info(':: %s'%(a.make_node_info()))

@@ -4,6 +4,9 @@ import logging
 log = logging.getLogger('infonet')
 
 class Db:
+	
+	MaxDepth = 3
+	
 	def __init__(self, dbpath=":memory:"):
 		self.conn = sqlite3.connect(dbpath)				
 		self.node_id = None
@@ -69,7 +72,7 @@ class Db:
 
 	def is_linked(self, id_a, id_b):
 		cur = self.conn.cursor()
-		cur.execute("select count(*) from link where id_a=? and id_b=?", (id_a, id_b))
+		cur.execute("select count(*) from link where (id_a=? and id_b=?) or (id_a=? and id_b=?)", (id_a, id_b, id_b, id_a))
 		r = cur.fetchone()
 		return r and  r[0] > 0
 
@@ -77,8 +80,9 @@ class Db:
 		if self.is_linked(id_a, id_b):
 			return False
 		self.conn.cursor().execute("insert into link (id_a, id_b) values (?, ?)", (id_a, id_b))
+		self.conn.cursor().execute("insert into link (id_a, id_b) values (?, ?)", (id_b, id_a))
 		return True
-
+		
 	def set_node_info(self, data):
 		
 		jid = data['jid']
@@ -118,6 +122,40 @@ class Db:
 			layer.add(int(r[0]))
 		return layer
 		
+	def get_distance(self, jid_a, jid_b):
+		if jid_a == jid_b:
+			return 0
+			
+		id_a = self.get_node_id(jid_a)
+		if not id_a:
+			log.error('jid %s not found in db'%(jid_a))
+			return None
+		
+		id_b = self.get_node_id(jid_b)
+		if not id_b:
+			log.error('jid %s not found in db'%(jid_b))
+			return None
+		
+		return self.get_id_distance(id_a, id_b, 0)
+		
+	
+	def get_id_distance(self, a, b, depth):
+		if depth > Db.MaxDepth:
+			return None
+			
+		if self.is_linked(a, b):
+			return 1
+		ids_a = self.get_linked_ids(a)
+		
+		dist = None
+		for id_a in ids_a:
+			d = self.get_id_distance(id_a, b, depth + 1)
+			if d and (not dist or d < dist):
+				dist = d
+		if not dist:
+			return None
+		return dist + 1
+		
 		
 	def get_linked_nodes(self, jid):
 		
@@ -128,6 +166,12 @@ class Db:
 		cur = self.conn.cursor()
 		cur.execute("select node.jid from node join link on node.id = link.id_b where link.id_a = ?", (node_id,))
 		return [r[0] for r in cur.fetchall()]
+		
+	def get_nodes(self):
+		cur = self.conn.cursor()
+		cur.execute("select node.jid from node")
+		return [r[0] for r in cur.fetchall()]
+		
 
 x = Db()
 if x.set_node('test'):
