@@ -1,0 +1,1 @@
+ - Try to connect in a way that there is more then one route to each reachable node. If possible prefer differed xmpp servers when making a route.
